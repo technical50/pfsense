@@ -343,7 +343,11 @@ function filter_configure_sync($delete_states_if_needed = true) {
 			 * FilterDNS has three debugging levels. The default choosen is 1.
 			 * Availabe are level 2 and greater then 2.
 			 */
-			mwexec("/usr/local/sbin/filterdns -p {$g['varrun_path']}/filterdns.pid -i 300 -c {$g['varetc_path']}/filterdns.conf -d 1");
+			if (isset($config['system']['aliasesresolveinterval']) && is_numeric($config['system']['aliasesresolveinterval']))
+				$resolve_interval = $config['system']['aliasesresolveinterval'];
+			else
+				$resolve_interval = 300;
+			mwexec("/usr/local/sbin/filterdns -p {$g['varrun_path']}/filterdns.pid -i {$resolve_interval} -c {$g['varetc_path']}/filterdns.conf -d 1");
 		}
 	} else {
 		killbypid("{$g['varrun_path']}/filterdns.pid");
@@ -2248,8 +2252,19 @@ function filter_generate_user_rule($rule) {
 		$aline['tag'] = " tag " .$rule['tag']. " ";
 	if (!empty($rule['tagged']))
 		$aline['tagged'] = " tagged " .$rule['tagged'] . " ";
-	if (!empty($rule['dscp']))
-		$aline['dscp'] = " dscp " . $rule['dscp'] . " ";
+	if (!empty($rule['dscp'])) {
+		switch (strtolower($rule['dscp'])) {
+			case 'va':  $aline['dscp'] = " dscp 44 "; break;
+			case 'cs1': $aline['dscp'] = " dscp 8 ";  break;
+			case 'cs2': $aline['dscp'] = " dscp 16 "; break;
+			case 'cs3': $aline['dscp'] = " dscp 24 "; break;
+			case 'cs4': $aline['dscp'] = " dscp 32 "; break;
+			case 'cs5': $aline['dscp'] = " dscp 40 "; break;
+			case 'cs6': $aline['dscp'] = " dscp 48 "; break;
+			case 'cs7': $aline['dscp'] = " dscp 56 "; break;
+			default:    $aline['dscp'] = " dscp " . $rule['dscp'] . " "; break;
+		}
+	}
 	if (!empty($rule['vlanprio']) && ($rule['vlanprio'] != "none"))
 		$aline['vlanprio'] = " ieee8021q-pcp " . $rule['vlanprio'] . " ";
 	if (!empty($rule['vlanprioset']) && ($rule['vlanprioset'] != "none"))
@@ -2257,39 +2272,40 @@ function filter_generate_user_rule($rule) {
 	if ($type == "pass") {
 		if (isset($rule['allowopts']))
 			$aline['allowopts'] = " allow-opts ";
-
-		$aline['flags'] = "";
-		if ($rule['protocol'] == "tcp") {
-			if (isset($rule['tcpflags_any']))
-				$aline['flags'] = "flags any ";
-			else if (!empty($rule['tcpflags2'])) {
-				$aline['flags'] = "flags ";
-				if (!empty($rule['tcpflags1'])) {
-					$flags1 = explode(",", $rule['tcpflags1']);
-					foreach ($flags1 as $flag1) {
-						// CWR flag needs special treatment
-						if($flag1[0] == "c")
-							$aline['flags'] .= "W";
-						else
-							$aline['flags'] .= strtoupper($flag1[0]);
-					}
+	}
+	$aline['flags'] = "";
+	if ($rule['protocol'] == "tcp") {
+		if (isset($rule['tcpflags_any']))
+			$aline['flags'] = "flags any ";
+		else if (!empty($rule['tcpflags2'])) {
+			$aline['flags'] = "flags ";
+			if (!empty($rule['tcpflags1'])) {
+				$flags1 = explode(",", $rule['tcpflags1']);
+				foreach ($flags1 as $flag1) {
+					// CWR flag needs special treatment
+					if($flag1[0] == "c")
+						$aline['flags'] .= "W";
+					else
+						$aline['flags'] .= strtoupper($flag1[0]);
 				}
-				$aline['flags'] .= "/";
-				if (!empty($rule['tcpflags2'])) {
-					$flags2 = explode(",", $rule['tcpflags2']);
-					foreach ($flags2 as $flag2) {
-						// CWR flag needs special treatment
-						if($flag2[0] == "c")
-							$aline['flags'] .= "W";
-						else
-							$aline['flags'] .= strtoupper($flag2[0]);
-					}
+			}
+			$aline['flags'] .= "/";
+			if (!empty($rule['tcpflags2'])) {
+				$flags2 = explode(",", $rule['tcpflags2']);
+				foreach ($flags2 as $flag2) {
+					// CWR flag needs special treatment
+					if($flag2[0] == "c")
+						$aline['flags'] .= "W";
+					else
+						$aline['flags'] .= strtoupper($flag2[0]);
 				}
-				$aline['flags'] .= " ";
-			} else
-				$aline['flags'] = "flags S/SA ";
+			}
+			$aline['flags'] .= " ";
+		} else {
+			$aline['flags'] = "flags S/SA ";
 		}
-
+	}
+	if (($rule['protocol'] == "tcp") && ($type == "pass")) {
 		/*
 		 *	# keep state
 		 *		works with TCP, UDP, and ICMP.
@@ -2364,10 +2380,6 @@ function filter_generate_user_rule($rule) {
 
 					$aline['flags'] .= " ) ";
 				}
-	}
-	if($type == "reject" && $rule['protocol'] == "tcp") {
-		/* special reject packet */
-		$aline['flags'] .= "flags S/SA ";
 	}
 	if($rule['defaultqueue'] <> "") {
 		$aline['queue'] = " queue (".$rule['defaultqueue'];
