@@ -112,23 +112,16 @@ $grouptmp = link_interface_to_group($interface);
 if (!empty($grouptmp))
 	array_walk($grouptmp, 'interface_group_add_member');
 
-if ($linkupevent == false || substr($interface_real, 0, 4) == "ovpn") {
-	unset($bridgetmp);
-	$bridgetmp = link_interface_to_bridge($interface);
-	if (!empty($bridgetmp))
-		interface_bridge_add_member($bridgetmp, $interface_real);
-}
+unset($bridgetmp);
+$bridgetmp = link_interface_to_bridge($interface);
+if (!empty($bridgetmp))
+	interface_bridge_add_member($bridgetmp, $interface_real);
 
 /* make new hosts file */
-if ($interface == "lan")
-	system_hosts_generate();
+system_hosts_generate();
 
 /* check tunneled IPv6 interface tracking */
 switch($config['interfaces'][$interface]['ipaddrv6']) {
-	case "slaac":
-	case "dhcp6":
-		interface_dhcpv6_configure($interface, $config['interfaces'][$interface]);
-		break;
 	case "6to4":
 		interface_6to4_configure($interface, $config['interfaces'][$interface]);
 		break;

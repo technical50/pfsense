@@ -3,7 +3,7 @@
 	captiveportal.inc
 	part of pfSense (http://www.pfSense.org)
 	Copyright (C) 2004-2011 Scott Ullrich <sullrich@gmail.com>
-	Copyright (C) 2009-2012 Ermal Luçi <eri@pfsense.org>
+	Copyright (C) 2009-2012 Ermal Luï¿½i <eri@pfsense.org>
 	Copyright (C) 2003-2006 Manuel Kasper <mk@neon1.net>.
 
 	originally part of m0n0wall (http://m0n0.ch/wall)
@@ -36,7 +36,7 @@
 	added rules which may have been created by other per-user code (index.php, etc).
 	These changes are (c) 2004 Keycom PLC.
 	
-	pfSense_BUILDER_BINARIES:	/sbin/ipfw	/sbin/sysctl
+	pfSense_BUILDER_BINARIES:	/sbin/ipfw	/sbin/sysctl	/sbin/route
 	pfSense_BUILDER_BINARIES:	/usr/local/sbin/lighttpd	/usr/local/bin/minicron /sbin/pfctl
 	pfSense_BUILDER_BINARIES:	/bin/hostname	/bin/cp 
 	pfSense_MODULE: captiveportal
@@ -1228,7 +1228,9 @@ function radius($username,$password,$clientip,$clientmac,$type, $radiusctx = nul
 			$auth_list,
 			$pipeno,
 			$radiusctx);
-	}
+	} else {
+	         captiveportal_free_dn_ruleno($pipeno);
+	       }
 
 	return $auth_list;
 }
@@ -1319,17 +1321,8 @@ function captiveportal_write_elements() {
 	
 	$cpcfg = $config['captiveportal'][$cpzone];
 
-	/* delete any existing elements */
-	if (is_dir($g['captiveportal_element_path'])) {
-		$dh = opendir($g['captiveportal_element_path']);
-		while (($file = readdir($dh)) !== false) {
-			if ($file != "." && $file != "..")
-				unlink($g['captiveportal_element_path'] . "/" . $file);
-		}
-		closedir($dh);
-	} else {
+	if (!is_dir($g['captiveportal_element_path']))
 		@mkdir($g['captiveportal_element_path']);
-	}
 
 	if (is_array($cpcfg['element'])) {
 		conf_mount_rw();
@@ -1338,8 +1331,8 @@ function captiveportal_write_elements() {
 				printf(gettext("Error: cannot open '%s' in captiveportal_write_elements()%s"), $data['name'], "\n");
 				return 1;
 			}
-			unlink_if_exists("{$g['captiveportal_path']}/{$data['name']}");
-			@symlink("{$g['captiveportal_element_path']}/{$data['name']}", "{$g['captiveportal_path']}/{$data['name']}");
+			if (!file_exists("{$g['captiveportal_path']}/{$data['name']}"))
+				@symlink("{$g['captiveportal_element_path']}/{$data['name']}", "{$g['captiveportal_path']}/{$data['name']}");
 		}
 		conf_mount_ro();
 	}
@@ -1366,9 +1359,9 @@ function captiveportal_get_next_dn_ruleno($rulenos_start = 2000, $rulenos_range_
 		}
 	} else {
 		$rules = array_pad(array(), $rulenos_range_max, false);
+		$ruleno = $rulenos_start;
 		$rules[$rulenos_start] = "used";
 		$rules[++$rulenos_start] = "used";
-		$ruleno = $rulenos_start;
 	}
 	file_put_contents("{$g['vardb_path']}/captiveportaldn.rules", serialize($rules));
 	unlock($cpruleslck);
